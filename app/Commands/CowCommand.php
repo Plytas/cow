@@ -91,10 +91,13 @@ class CowCommand extends Command
 
     private function promptForClonesDir(): string
     {
-        return text(
+        return autocomplete(
             label: 'Where should clones be stored?',
+            options: fn(string $value) => glob(($value ?: $_SERVER['HOME'] . '/') . '*', GLOB_ONLYDIR) ?: [],
             default: $_SERVER['HOME'] . '/Code/clones',
             required: true,
+            validate: fn(string $value) => !is_dir(dirname($value)) ? 'Parent directory does not exist' : null,
+            hint: 'Use tab to accept, up/down to cycle.',
         );
     }
 
@@ -119,7 +122,7 @@ class CowCommand extends Command
 
     private function promptForProject(): array
     {
-        $name   = text(label: 'Project name', placeholder: 'My API', required: true);
+        $name   = text(label: 'Project name', placeholder: 'My Project', required: true);
         $path   = $this->promptForProjectPath();
         $domain = $this->resolveDomain($path);
 
