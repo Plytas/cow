@@ -13,6 +13,6 @@ return [
     |
     */
 
-    'strategy' => LaravelZero\Framework\Components\Updater\Strategy\GithubReleasesStrategy::class,
+    'strategy' => App\GithubReleasesStrategy::class,
 
 ];
