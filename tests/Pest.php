@@ -39,7 +39,9 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something(): void
+function fakeHome(): string
 {
-    // ..
+    $tempHome = sys_get_temp_dir() . '/cow-home-' . uniqid();
+    mkdir($tempHome, 0755, true);
+    return $tempHome;
 }

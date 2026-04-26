@@ -1,41 +1,96 @@
-<p align="center">
-    <img title="Laravel Zero" height="100" src="https://raw.githubusercontent.com/laravel-zero/docs/master/images/logo/laravel-zero-readme.png" alt="Laravel Zero Logo" />
-</p>
+# cow
 
-<p align="center">
-  <a href="https://github.com/laravel-zero/framework/actions"><img src="https://github.com/laravel-zero/laravel-zero/actions/workflows/tests.yml/badge.svg" alt="Build Status" /></a>
-  <a href="https://packagist.org/packages/laravel-zero/framework"><img src="https://img.shields.io/packagist/dt/laravel-zero/framework.svg" alt="Total Downloads" /></a>
-  <a href="https://packagist.org/packages/laravel-zero/framework"><img src="https://img.shields.io/packagist/v/laravel-zero/framework.svg?label=stable" alt="Latest Stable Version" /></a>
-  <a href="https://packagist.org/packages/laravel-zero/framework"><img src="https://img.shields.io/packagist/l/laravel-zero/framework.svg" alt="License" /></a>
-</p>
+A CLI for managing APFS copy-on-write git clones with [Laravel Valet](https://laravel.com/docs/valet) integration. Spin up isolated project clones instantly, switch between them, and let Valet serve the right one — without duplicating gigabytes of vendor files.
 
-Laravel Zero was created by [Nuno Maduro](https://github.com/nunomaduro) and [Owen Voke](https://github.com/owenvoke), and is a micro-framework that provides an elegant starting point for your console application. It is an **unofficial** and customized version of Laravel optimized for building command-line applications.
+## Installation
 
-- Built on top of the [Laravel](https://laravel.com) components.
-- Optional installation of Laravel [Eloquent](https://laravel-zero.com/docs/database/), Laravel [Logging](https://laravel-zero.com/docs/logging/) and many others.
-- Supports interactive [menus](https://laravel-zero.com/docs/build-interactive-menus/) and [desktop notifications](https://laravel-zero.com/docs/send-desktop-notifications/) on Linux, Windows & MacOS.
-- Ships with a [Scheduler](https://laravel-zero.com/docs/task-scheduling/) and  a [Standalone Compiler](https://laravel-zero.com/docs/build-a-standalone-application/).
-- Integration with [Collision](https://github.com/nunomaduro/collision) - Beautiful error reporting
-- Follow the creator Nuno Maduro:
-    - YouTube: **[youtube.com/@nunomaduro](https://www.youtube.com/@nunomaduro)** — Videos every weekday
-    - Twitch: **[twitch.tv/enunomaduro](https://www.twitch.tv/enunomaduro)** — Streams (almost) every weekday
-    - Twitter / X: **[x.com/enunomaduro](https://x.com/enunomaduro)**
-    - LinkedIn: **[linkedin.com/in/nunomaduro](https://www.linkedin.com/in/nunomaduro)**
-    - Instagram: **[instagram.com/enunomaduro](https://www.instagram.com/enunomaduro)**
-    - Tiktok: **[tiktok.com/@enunomaduro](https://www.tiktok.com/@enunomaduro)**
+Download the latest `cow` binary from [GitHub Releases](https://github.com/Plytas/cow/releases/latest) and place it in your `PATH`:
 
-------
+```bash
+curl -L https://github.com/Plytas/cow/releases/latest/download/cow -o ~/bin/cow
+chmod +x ~/bin/cow
+```
 
-## Documentation
+## Self-update
 
-For full documentation, visit [laravel-zero.com](https://laravel-zero.com/).
+```bash
+cow self-update
+```
 
-## Support the development
-**Do you like this project? Support it by donating**
+## Usage
 
-- PayPal: [Donate](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=66BYDWAT92N6L)
-- Patreon: [Donate](https://www.patreon.com/nunomaduro)
+### Interactive TUI
+
+Running `cow` with no arguments opens an interactive menu. On first run it walks you through initial setup (clones directory, IDE, projects).
+
+```bash
+cow
+```
+
+From the menu you can:
+- Activate a clone (relinks Valet and restarts PHP-FPM)
+- Open a clone in your IDE
+- Create a new clone from a branch name, a remote branch, or an open PR
+- Delete a clone
+- Switch between configured projects
+
+### Non-interactive commands
+
+All commands accept `--json` to emit machine-readable output.
+
+#### List projects
+
+```bash
+cow:projects [--json]
+```
+
+#### Add a project
+
+```bash
+cow:project-add <name> <path> [--domain=<domain>] [--json]
+```
+
+#### List clones for a project
+
+```bash
+cow:list <project> [--json]
+```
+
+#### Create a clone
+
+```bash
+cow:create <project> [--branch=<branch>] [--pr=<number>] [--json]
+```
+
+#### Activate a clone (relink Valet)
+
+```bash
+cow:activate <project> <clone> [--json]
+```
+
+Use `main` as the clone name to activate the source repo itself.
+
+#### Open a clone in your IDE
+
+```bash
+cow:open <project> [<clone>=main] [--json]
+```
+
+#### Delete a clone
+
+```bash
+cow:delete <project> <clone> [--force] [--json]
+```
+
+## Releasing a new version
+
+Push a version tag — GitHub Actions builds the PHAR and publishes the release automatically:
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
 
 ## License
 
-Laravel Zero is an open-source software licensed under the MIT license.
+MIT

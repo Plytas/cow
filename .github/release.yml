@@ -1,0 +1,8 @@
+changelog:
+  categories:
+    - title: 🚀 New features
+      labels: [enhancement, feature]
+    - title: 🐛 Bug fixes
+      labels: [bug, fix]
+    - title: 🧹 Maintenance
+      labels: [chore, refactor, deps]

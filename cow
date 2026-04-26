@@ -30,6 +30,14 @@ $app = require_once __DIR__.'/bootstrap/app.php';
 |
 */
 
+// Default to the interactive TUI when no command is given.
+// Without this, removing `default-command` from config would show the Artisan
+// command list instead. Injecting 'cow' here preserves the UX while keeping
+// subcommand routing (cow:list, cow:projects, etc.) working correctly.
+if (!isset($_SERVER['argv'][1]) || str_starts_with($_SERVER['argv'][1], '--')) {
+    array_splice($_SERVER['argv'], 1, 0, ['cow']);
+}
+
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 
 $status = $kernel->handle(

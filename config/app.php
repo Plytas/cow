@@ -67,6 +67,8 @@ return [
     |
     */
 
-    'default-command' => App\Commands\CowCommand::class,
+    // default-command is intentionally omitted — the entrypoint script injects
+    // 'cow' into argv when no command is given, preserving TUI-as-default
+    // without triggering Symfony's single-command mode (which breaks subcommand routing).
 
 ];
