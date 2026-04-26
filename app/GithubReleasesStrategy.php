@@ -35,7 +35,7 @@ class GithubReleasesStrategy implements StrategyInterface
             throw new RuntimeException('Could not parse release tag from GitHub API response.');
         }
 
-        $remoteVersion = ltrim($release['tag_name'], 'v');
+        $remoteVersion = $release['tag_name'];
 
         $asset = collect($release['assets'] ?? [])
             ->first(fn(array $a) => $a['name'] === $package);
