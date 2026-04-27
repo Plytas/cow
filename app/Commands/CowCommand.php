@@ -6,6 +6,7 @@ use App\CloneCreator;
 use App\CloneDir;
 use App\Config;
 use App\Project;
+use App\SetupWizard;
 use App\Shell;
 use App\Valet;
 use Closure;
@@ -17,13 +18,11 @@ use Laravel\Prompts\Support\Logger;
 use LaravelZero\Framework\Commands\Command;
 use RuntimeException;
 
-use function Laravel\Prompts\autocomplete;
 use function Laravel\Prompts\spin;
 use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\error;
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\search;
-use function Laravel\Prompts\select;
 use function Laravel\Prompts\task;
 use function Laravel\Prompts\text;
 
@@ -46,7 +45,7 @@ class CowCommand extends Command
 
     public function handle(): void
     {
-        $this->ensureConfigured();
+        SetupWizard::runIfNeeded();
 
         $this->project = $this->detectOrSelectProject();
 
@@ -62,96 +61,6 @@ class CowCommand extends Command
                 default                     => $this->showCloneActionMenu($choice),
             };
         } while ($choice !== self::ACTION_QUIT);
-    }
-
-    // ─── Setup ──────────────────────────────────────────────────────────────
-
-    private function ensureConfigured(): void
-    {
-        if (Config::exists()) {
-            return;
-        }
-
-        info('Welcome to cow! Let\'s set up your config.');
-
-        $clonesDir  = $this->promptForClonesDir();
-        $ideCommand = $this->promptForIde();
-        $projects   = $this->promptForInitialProjects();
-
-        Config::save([
-            'clones_dir'  => $clonesDir,
-            'ide_command' => $ideCommand,
-            'projects'    => $projects,
-        ]);
-
-        info('Config saved to ' . Config::path());
-    }
-
-    private function promptForClonesDir(): string
-    {
-        return autocomplete(
-            label: 'Where should clones be stored?',
-            options: fn(string $value) => glob(($value ?: $_SERVER['HOME'] . '/') . '*', GLOB_ONLYDIR) ?: [],
-            default: $_SERVER['HOME'] . '/Code/clones',
-            required: true,
-            validate: fn(string $value) => !is_dir(dirname($value)) ? 'Parent directory does not exist' : null,
-            hint: 'Use tab to accept, up/down to cycle.',
-        );
-    }
-
-    private function promptForIde(): string
-    {
-        return select(
-            label: 'Which IDE do you use?',
-            options: ['phpstorm' => 'PhpStorm', 'code' => 'VS Code', 'cursor' => 'Cursor'],
-        );
-    }
-
-    private function promptForInitialProjects(): array
-    {
-        $projects = [];
-
-        do {
-            $projects[] = $this->promptForProject();
-        } while (confirm('Add another project?', false));
-
-        return $projects;
-    }
-
-    private function promptForProject(): array
-    {
-        $name   = text(label: 'Project name', placeholder: 'My Project', required: true);
-        $path   = $this->promptForProjectPath();
-        $domain = $this->resolveDomain($path);
-
-        return compact('name', 'path', 'domain');
-    }
-
-    private function promptForProjectPath(): string
-    {
-        return autocomplete(
-            label: 'Absolute path to source repo',
-            options: fn(string $value) => glob(($value ?: $_SERVER['HOME'] . '/') . '*', GLOB_ONLYDIR) ?: [],
-            default: $_SERVER['HOME'] . '/',
-            required: true,
-            validate: fn(string $value) => is_dir($value) ? null : 'Directory does not exist',
-            hint: 'Use tab to accept, up/down to cycle.',
-        );
-    }
-
-    private function resolveDomain(string $path): string
-    {
-        $detected = Valet::domainForPath($path);
-
-        if ($detected !== null) {
-            info("Detected valet domain: $detected");
-            return $detected;
-        }
-
-        return text(
-            label: 'Valet domain (without .test)',
-            placeholder: 'myproject',
-        );
     }
 
     // ─── Project Selection ──────────────────────────────────────────────────
@@ -187,7 +96,7 @@ class CowCommand extends Command
 
     private function addProject(): Project
     {
-        $data = $this->promptForProject();
+        $data = SetupWizard::promptForProject();
 
         $config               = Config::load();
         $config['projects'][] = $data;
