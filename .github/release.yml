@@ -6,3 +6,5 @@ changelog:
       labels: [bug, fix]
     - title: 🧹 Maintenance
       labels: [chore, refactor, deps]
+    - title: Other changes
+      labels: ["*"]
