@@ -82,6 +82,29 @@ cow:open <project> [<clone>=main] [--json]
 cow:delete <project> <clone> [--force] [--json]
 ```
 
+## Claude Code skill
+
+A [Claude Code](https://claude.com/claude-code) skill ships with this repo at [`.claude/skills/cow/SKILL.md`](.claude/skills/cow/SKILL.md). It teaches Claude how to drive `cow` non-interactively (using `--json` output) so you can ask things like "switch to PR 1234" or "clean up the clone for that branch".
+
+### Install
+
+Copy the skill into your user-level Claude skills directory:
+
+```bash
+mkdir -p ~/.claude/skills/cow
+curl -L https://raw.githubusercontent.com/Plytas/cow/main/.claude/skills/cow/SKILL.md \
+  -o ~/.claude/skills/cow/SKILL.md
+```
+
+### Use
+
+Invoke explicitly with `/cow` followed by what you want, or just describe the task and Claude will pick the skill up automatically:
+
+```
+/cow switch to PR 1234 on My API
+/cow delete the pr-1234 clone for My API
+```
+
 ## Releasing a new version
 
 Push a version tag — GitHub Actions builds the PHAR and publishes the release automatically:
