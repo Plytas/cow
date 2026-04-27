@@ -28,7 +28,23 @@ class SelfUpdateCommand extends Command
                 return;
             }
 
-            info('Updated from ' . $phar->getOldVersion() . ' to ' . $phar->getNewVersion() . '.');
+            // After replacePhar() rename()s the new bytes over the running PHAR,
+            // the PHAR's autoloader backing is gone. Two consequences:
+            //
+            //   1. info()/error() (Laravel Prompts) lazy-load Note and a renderer
+            //      the first time they're called — after the replace, those
+            //      autoloads silently fail and the success message disappears.
+            //      We use $this->output (Symfony OutputInterface, already loaded)
+            //      instead.
+            //
+            //   2. PHP's shutdown sequence runs after handle() returns and trips
+            //      on the replaced PHAR (exit 255 with no further output). We
+            //      exit(0) here to skip framework/PHAR-engine teardown entirely.
+            $old = $phar->getOldVersion();
+            $new = $phar->getNewVersion();
+
+            $this->output->writeln("<info>✓ Updated from $old to $new.</info>");
+            exit(self::SUCCESS);
         } catch (Throwable $e) {
             error('Update failed: ' . $e->getMessage());
         }
