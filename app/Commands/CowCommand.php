@@ -387,7 +387,10 @@ class CowCommand extends Command
         task(
             label: 'Deleting clone',
             callback: function (Logger $logger) use ($path, $name) {
-                $this->timed($logger, "Deleted $name", fn() => Shell::stream($logger, 'rm -rf ' . escapeshellarg($path)));
+                $this->timed($logger, "Deleted $name", function () use ($logger, $path) {
+                    $logger->subLabel("rename + async rm $path");
+                    (new CloneCreator())->deleteTree($path);
+                });
                 return true;
             },
             keepSummary: true,
@@ -521,10 +524,10 @@ class CowCommand extends Command
         task(
             label: "Creating clone $cloneName",
             callback: function (Logger $logger) use ($source, $dest, $branch, $installDeps) {
-                $this->timed($logger, 'Copied source', fn() => Shell::stream(
-                    $logger,
-                    'cp -rcP ' . escapeshellarg($source) . ' ' . escapeshellarg($dest),
-                ));
+                $this->timed($logger, 'Copied source', function () use ($logger, $source, $dest) {
+                    $logger->subLabel("clonefile($source, $dest)");
+                    (new CloneCreator())->cloneTree($source, $dest);
+                });
 
                 $escapedDest   = escapeshellarg($dest);
                 $escapedBranch = escapeshellarg($branch);
