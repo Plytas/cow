@@ -44,7 +44,7 @@ readonly class Project
 
         $entries = array_filter(
             scandir($dir),
-            fn($e) => $e !== '.' && $e !== '..' && is_dir("$dir/$e")
+            fn($e) => $e !== '.' && $e !== '..' && !str_starts_with($e, '.cow-deleting-') && is_dir("$dir/$e")
         );
 
         return array_values(array_map(fn($e) => new CloneDir("$dir/$e"), $entries));

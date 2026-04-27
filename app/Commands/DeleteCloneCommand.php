@@ -2,8 +2,8 @@
 
 namespace App\Commands;
 
+use App\CloneCreator;
 use App\ProjectResolver;
-use App\Shell;
 use InvalidArgumentException;
 use LaravelZero\Framework\Commands\Command;
 use RuntimeException;
@@ -40,7 +40,7 @@ class DeleteCloneCommand extends Command
                 throw new InvalidArgumentException("Pass --force to delete non-interactively");
             }
 
-            Shell::run('rm -rf ' . escapeshellarg($path));
+            (new CloneCreator())->deleteTree($path);
 
             if ($this->option('json')) {
                 $this->line(json_encode(['deleted' => true, 'name' => $cloneName, 'path' => $path]));

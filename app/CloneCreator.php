@@ -67,6 +67,33 @@ class CloneCreator
         Shell::run('cp -rcP ' . escapeshellarg($source) . ' ' . escapeshellarg($dest));
     }
 
+    /**
+     * Delete a clone tree. Renames it to a sibling `.cow-deleting-*` first
+     * (a metadata-only operation on APFS within the same volume) and then
+     * spawns a detached `rm -rf` to reclaim space asynchronously. From the
+     * caller's perspective the deletion is effectively instant; the OS
+     * finishes unlinking inodes in the background.
+     *
+     * Falls back to a synchronous `rm -rf` if the rename fails (e.g. the
+     * trash sibling can't be created on the same filesystem).
+     */
+    public function deleteTree(string $path): void
+    {
+        if (!is_dir($path)) {
+            return;
+        }
+
+        $trash = dirname($path) . '/.cow-deleting-' . uniqid('', true) . '-' . basename($path);
+
+        if (@rename($path, $trash)) {
+            // Detach via shell `&` so the rm survives this process exiting.
+            Shell::quietly('nohup rm -rf ' . escapeshellarg($trash) . ' >/dev/null 2>&1 &');
+            return;
+        }
+
+        Shell::run('rm -rf ' . escapeshellarg($path));
+    }
+
     private static function clonefile(string $source, string $dest): bool
     {
         try {

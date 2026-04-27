@@ -387,7 +387,10 @@ class CowCommand extends Command
         task(
             label: 'Deleting clone',
             callback: function (Logger $logger) use ($path, $name) {
-                $this->timed($logger, "Deleted $name", fn() => Shell::stream($logger, 'rm -rf ' . escapeshellarg($path)));
+                $this->timed($logger, "Deleted $name", function () use ($logger, $path) {
+                    $logger->subLabel("rename + async rm $path");
+                    (new CloneCreator())->deleteTree($path);
+                });
                 return true;
             },
             keepSummary: true,
