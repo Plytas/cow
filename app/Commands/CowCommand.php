@@ -494,40 +494,34 @@ class CowCommand extends Command
 
     private function createClone(string $branch, string $cloneName): void
     {
-        $source = $this->project->path();
-        $dest   = $this->project->clonesDir() . '/' . $cloneName;
+        $creator = new CloneCreator();
+        $source  = $this->project->path();
 
-        if (!$this->prepareDestination($dest, $cloneName)) {
+        try {
+            $dest = $creator->prepareDestination($this->project, $cloneName);
+        } catch (RuntimeException $e) {
+            error($e->getMessage());
             return;
         }
 
-        $installDeps = file_exists("$source/composer.json");
-
         task(
             label: "Creating clone $cloneName",
-            callback: function (Logger $logger) use ($source, $dest, $branch, $installDeps) {
-                $this->timed($logger, 'Copied source', function () use ($logger, $source, $dest) {
+            callback: function (Logger $logger) use ($creator, $source, $dest, $branch) {
+                $this->timed($logger, 'Copied source', function () use ($logger, $creator, $source, $dest) {
                     $logger->subLabel("clonefile($source, $dest)");
-                    (new CloneCreator())->cloneTree($source, $dest);
+                    $creator->cloneTree($source, $dest);
                 });
 
-                $escapedDest   = escapeshellarg($dest);
-                $escapedBranch = escapeshellarg($branch);
-
-                $this->timed($logger, "Checked out $branch", function () use ($logger, $escapedDest, $escapedBranch) {
-                    if (Shell::quietly("git -C $escapedDest fetch origin $escapedBranch")) {
-                        Shell::stream($logger, "git -C $escapedDest checkout $escapedBranch");
-                    } else {
-                        Shell::stream($logger, "git -C $escapedDest checkout -b $escapedBranch");
-                    }
-                    Shell::quietly("git -C $escapedDest restore .");
+                $this->timed($logger, "Checked out $branch", function () use ($logger, $creator, $dest, $branch) {
+                    $logger->subLabel("git checkout $branch");
+                    $creator->checkoutBranch($dest, $branch, fn(string $line) => $logger->line($line));
                 });
 
-                if ($installDeps && CloneCreator::composerLockDiffers($source, $dest)) {
-                    $this->timed($logger, 'Installed composer dependencies', fn() => Shell::stream(
-                        $logger,
-                        'composer -d ' . escapeshellarg($dest) . ' install --no-interaction',
-                    ));
+                if (CloneCreator::composerLockDiffers($source, $dest)) {
+                    $this->timed($logger, 'Installed composer dependencies', function () use ($logger, $creator, $source, $dest) {
+                        $logger->subLabel('composer install');
+                        $creator->composerInstallIfNeeded($source, $dest, fn(string $line) => $logger->line($line));
+                    });
                 }
 
                 return true;
@@ -536,23 +530,6 @@ class CowCommand extends Command
         );
 
         info("✓ Done: $dest [$branch]");
-    }
-
-
-    private function prepareDestination(string $dest, string $cloneName): bool
-    {
-        if (is_dir($dest)) {
-            error("Clone '$cloneName' already exists at $dest");
-            return false;
-        }
-
-        $parent = dirname($dest);
-
-        if (!is_dir($parent)) {
-            mkdir($parent, 0755, true);
-        }
-
-        return true;
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────────

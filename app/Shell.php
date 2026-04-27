@@ -25,9 +25,24 @@ class Shell
     {
         $logger->subLabel($command);
 
+        return self::runWithOutput($command, fn(string $line) => $logger->line($line), $cwd);
+    }
+
+    /**
+     * Run a command and invoke $onLine for every line of output (stdout or stderr).
+     * Returns the full trimmed stdout.
+     */
+    public static function runWithOutput(string $command, callable $onLine, ?string $cwd = null): string
+    {
         $process = Process::fromShellCommandline($command, $cwd);
         $process->setTimeout(120);
-        $process->run(fn($type, $line) => $logger->line($line));
+        $process->run(function ($type, $output) use ($onLine) {
+            foreach (explode("\n", rtrim($output)) as $line) {
+                if ($line !== '') {
+                    $onLine($line);
+                }
+            }
+        });
 
         if (!$process->isSuccessful()) {
             throw new RuntimeException($process->getErrorOutput() ?: $process->getOutput());
