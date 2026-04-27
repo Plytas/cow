@@ -521,10 +521,7 @@ class CowCommand extends Command
         task(
             label: "Creating clone $cloneName",
             callback: function (Logger $logger) use ($source, $dest, $branch, $installDeps) {
-                $this->timed($logger, 'Copied source', fn() => Shell::stream(
-                    $logger,
-                    'cp -rcP ' . escapeshellarg($source) . ' ' . escapeshellarg($dest),
-                ));
+                $this->timed($logger, 'Copied source', fn() => (new CloneCreator())->cloneTree($source, $dest));
 
                 $escapedDest   = escapeshellarg($dest);
                 $escapedBranch = escapeshellarg($branch);

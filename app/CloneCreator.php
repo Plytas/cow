@@ -58,7 +58,7 @@ class CloneCreator
      * if the helper can't be built or the parallel clone fails (e.g. cross-
      * volume destination, where clonefile() returns EXDEV).
      */
-    private function cloneTree(string $source, string $dest): void
+    public function cloneTree(string $source, string $dest): void
     {
         $helper = $this->ensureCloneHelper();
 
