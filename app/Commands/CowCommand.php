@@ -5,6 +5,7 @@ namespace App\Commands;
 use App\CloneCreator;
 use App\CloneDir;
 use App\Config;
+use App\MenuBuilder;
 use App\Project;
 use App\SetupWizard;
 use App\Shell;
@@ -111,55 +112,21 @@ class CowCommand extends Command
 
     private function showMainMenu(): string
     {
-        [$options, $meta] = $this->buildMainMenu();
+        $activePath = $this->project->valetType() === 'link' ? $this->project->activePath() : null;
+
+        [$options, $meta] = (new MenuBuilder())->buildMain($this->project, $activePath, self::TARGET_MAIN, [
+            self::ACTION_NEW_CLONE        => '+ New clone',
+            self::ACTION_NEW_CLONE_PR     => '+ New clone from PR',
+            self::ACTION_NEW_CLONE_BRANCH => '+ New clone from branch',
+            self::ACTION_CHANGE_PROJECT   => '⇄ Change project',
+            self::ACTION_QUIT             => '✕ Quit',
+        ]);
 
         return $this->askMenu(
             label: $this->project->name(),
             options: $options,
             info: fn(?string $value) => $meta[$value] ?? '',
         );
-    }
-
-    private function buildMainMenu(): array
-    {
-        $project    = $this->project;
-        $activePath = $project->valetType() === 'link' ? $project->activePath() : null;
-
-        $options = [];
-        $meta    = [];
-
-        foreach ($this->menuEntries($project, $activePath) as [$name, $branch, $active]) {
-            $label          = $active ? $this->green($name . '  ✓') : $name;
-            $options[$name] = $label;
-            $meta[$name]    = '⎇ ' . $branch;
-        }
-
-        $options[self::ACTION_NEW_CLONE]        = '+ New clone';
-        $options[self::ACTION_NEW_CLONE_PR]     = '+ New clone from PR';
-        $options[self::ACTION_NEW_CLONE_BRANCH] = '+ New clone from branch';
-        $options[self::ACTION_CHANGE_PROJECT]   = '⇄ Change project';
-        $options[self::ACTION_QUIT]             = '✕ Quit';
-
-        return [$options, $meta];
-    }
-
-    private function menuEntries(Project $project, ?string $activePath): array
-    {
-        $entries = [[
-            self::TARGET_MAIN,
-            $this->gitBranch($project->path()),
-            $this->isActive($project->path(), $activePath),
-        ]];
-
-        foreach ($project->clones() as $clone) {
-            $entries[] = [
-                $clone->name(),
-                $clone->branch(),
-                $this->isActive($clone->path(), $activePath),
-            ];
-        }
-
-        return $entries;
     }
 
     // ─── Clone Action Menu ──────────────────────────────────────────────────
@@ -179,7 +146,7 @@ class CowCommand extends Command
 
         $action = $this->askMenu(
             label: $name,
-            options: $this->buildCloneActions($name, $project->valetType()),
+            options: (new MenuBuilder())->buildCloneActions($name, $project->valetType(), self::TARGET_MAIN),
             info: fn(?string $_) => $info,
         );
 
@@ -198,25 +165,6 @@ class CowCommand extends Command
         }
 
         return $this->findClone($this->project->clones(), $name)?->path();
-    }
-
-    private function buildCloneActions(string $name, string $valetType): array
-    {
-        $options = [];
-
-        if ($valetType !== 'proxy') {
-            $options['activate'] = $valetType === 'link' ? 'Activate (relink valet)' : 'Activate (link valet)';
-        }
-
-        $options['ide'] = 'Open in IDE';
-
-        if ($name !== self::TARGET_MAIN) {
-            $options['delete'] = 'Delete';
-        }
-
-        $options['back'] = '←  Back';
-
-        return $options;
     }
 
     // ─── Clone Actions ──────────────────────────────────────────────────────
