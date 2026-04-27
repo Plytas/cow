@@ -60,6 +60,8 @@ class CloneCreator
      */
     public function cloneTree(string $source, string $dest): void
     {
+        self::sweepStaleTrash(dirname($dest));
+
         if (PHP_OS_FAMILY === 'Darwin' && self::clonefile($source, $dest)) {
             return;
         }
@@ -83,6 +85,8 @@ class CloneCreator
             return;
         }
 
+        self::sweepStaleTrash(dirname($path));
+
         $trash = dirname($path) . '/.cow-deleting-' . uniqid('', true) . '-' . basename($path);
 
         if (@rename($path, $trash)) {
@@ -92,6 +96,22 @@ class CloneCreator
         }
 
         Shell::run('rm -rf ' . escapeshellarg($path));
+    }
+
+    /**
+     * Asynchronously rm any leftover `.cow-deleting-*` siblings in $dir.
+     * Self-heals trash from previous runs that crashed between rename and
+     * background rm spawn (or whose async rm was interrupted).
+     */
+    private static function sweepStaleTrash(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+
+        foreach (glob($dir . '/.cow-deleting-*', GLOB_NOSORT | GLOB_ONLYDIR) ?: [] as $stale) {
+            Shell::quietly('nohup rm -rf ' . escapeshellarg($stale) . ' >/dev/null 2>&1 &');
+        }
     }
 
     private static function clonefile(string $source, string $dest): bool
