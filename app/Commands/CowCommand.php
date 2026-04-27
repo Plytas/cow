@@ -12,8 +12,6 @@ use Closure;
 use Illuminate\Support\Str;
 use DateTimeImmutable;
 use Exception;
-use Illuminate\Process\Pool;
-use Illuminate\Support\Facades\Process;
 use Laravel\Prompts\Concerns\Colors;
 use Laravel\Prompts\Support\Logger;
 use LaravelZero\Framework\Commands\Command;
@@ -338,23 +336,7 @@ class CowCommand extends Command
                     $this->timed($logger, 'Restarted ' . implode(', ', $services), function () use ($logger, $services) {
                         $logger->subLabel('brew services restart ' . implode(' ', $services) . ' (parallel)');
 
-                        $results = Process::concurrently(function (Pool $pool) use ($services) {
-                            foreach ($services as $service) {
-                                $pool->as($service)->command('brew services restart ' . escapeshellarg($service));
-                            }
-                        }, function (string $type, string $output, string $key) use ($logger) {
-                            foreach (explode("\n", rtrim($output)) as $line) {
-                                if ($line !== '') {
-                                    $logger->line("[$key] $line");
-                                }
-                            }
-                        });
-
-                        foreach ($results as $key => $result) {
-                            if (!$result->successful()) {
-                                throw new RuntimeException("$key failed: " . ($result->errorOutput() ?: $result->output()));
-                            }
-                        }
+                        Valet::restartPhpServices(fn(string $key, string $line) => $logger->line("[$key] $line"));
                     });
                 }
 

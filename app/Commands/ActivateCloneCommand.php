@@ -5,8 +5,6 @@ namespace App\Commands;
 use App\ProjectResolver;
 use App\Shell;
 use App\Valet;
-use Illuminate\Process\Pool;
-use Illuminate\Support\Facades\Process;
 use InvalidArgumentException;
 use LaravelZero\Framework\Commands\Command;
 use RuntimeException;
@@ -30,21 +28,7 @@ class ActivateCloneCommand extends Command
 
             Shell::run('valet link --secure ' . escapeshellarg($domain), $path);
 
-            $services = Valet::runningPhpServices();
-
-            if ($services !== []) {
-                $results = Process::concurrently(function (Pool $pool) use ($services) {
-                    foreach ($services as $service) {
-                        $pool->as($service)->command('brew services restart ' . escapeshellarg($service));
-                    }
-                });
-
-                foreach ($results as $key => $result) {
-                    if (!$result->successful()) {
-                        throw new RuntimeException("Failed to restart $key: " . ($result->errorOutput() ?: $result->output()));
-                    }
-                }
-            }
+            $services = Valet::restartPhpServices();
 
             if ($this->option('json')) {
                 $this->line(json_encode([
