@@ -17,8 +17,24 @@ class CloneCreator
      */
     public function create(Project $project, string $branch, string $cloneName): string
     {
-        $source = $project->path();
-        $dest   = $project->clonesDir() . '/' . $cloneName;
+        $dest = $this->prepareDestination($project, $cloneName);
+
+        $this->cloneTree($project->path(), $dest);
+        $this->checkoutBranch($dest, $branch);
+        $this->composerInstallIfNeeded($project->path(), $dest);
+
+        return $dest;
+    }
+
+    /**
+     * Validate the clone name and ensure the parent directory exists.
+     * Returns the absolute destination path.
+     *
+     * @throws RuntimeException if the destination already exists
+     */
+    public function prepareDestination(Project $project, string $cloneName): string
+    {
+        $dest = $project->clonesDir() . '/' . $cloneName;
 
         if (is_dir($dest)) {
             throw new RuntimeException("Clone '$cloneName' already exists at $dest");
@@ -30,24 +46,52 @@ class CloneCreator
             mkdir($parent, 0755, true);
         }
 
-        $this->cloneTree($source, $dest);
+        return $dest;
+    }
 
+    /**
+     * Fetch and check out $branch in the clone at $dest.
+     *
+     * If $onLine is provided, output of the checkout command is streamed
+     * line-by-line to the callback (lets the TUI display progress).
+     */
+    public function checkoutBranch(string $dest, string $branch, ?callable $onLine = null): void
+    {
         $escapedDest   = escapeshellarg($dest);
         $escapedBranch = escapeshellarg($branch);
 
-        if (Shell::quietly("git -C $escapedDest fetch origin $escapedBranch")) {
-            Shell::run("git -C $escapedDest checkout $escapedBranch");
+        $checkout = Shell::quietly("git -C $escapedDest fetch origin $escapedBranch")
+            ? "git -C $escapedDest checkout $escapedBranch"
+            : "git -C $escapedDest checkout -b $escapedBranch";
+
+        if ($onLine !== null) {
+            Shell::runWithOutput($checkout, $onLine);
         } else {
-            Shell::run("git -C $escapedDest checkout -b $escapedBranch");
+            Shell::run($checkout);
         }
 
         Shell::quietly("git -C $escapedDest restore .");
+    }
 
-        if (file_exists("$source/composer.json") && self::composerLockDiffers($source, $dest)) {
-            Shell::run('composer -d ' . escapeshellarg($dest) . ' install --no-interaction');
+    /**
+     * Run `composer install` in $dest if the source has a composer.json
+     * and its lock file differs from the cloned one. Returns true if it ran.
+     */
+    public function composerInstallIfNeeded(string $source, string $dest, ?callable $onLine = null): bool
+    {
+        if (!file_exists("$source/composer.json") || !self::composerLockDiffers($source, $dest)) {
+            return false;
         }
 
-        return $dest;
+        $cmd = 'composer -d ' . escapeshellarg($dest) . ' install --no-interaction';
+
+        if ($onLine !== null) {
+            Shell::runWithOutput($cmd, $onLine);
+        } else {
+            Shell::run($cmd);
+        }
+
+        return true;
     }
 
     /**

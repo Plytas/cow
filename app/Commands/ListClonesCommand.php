@@ -2,20 +2,22 @@
 
 namespace App\Commands;
 
+use App\Commands\Concerns\HandlesCommandErrors;
 use App\ProjectResolver;
 use App\Shell;
-use InvalidArgumentException;
 use LaravelZero\Framework\Commands\Command;
 use RuntimeException;
 
 class ListClonesCommand extends Command
 {
+    use HandlesCommandErrors;
+
     protected $signature   = 'cow:list {project} {--json}';
     protected $description = 'List clones for a project';
 
     public function handle(): int
     {
-        try {
+        return $this->respond(function () {
             $project    = ProjectResolver::byName($this->argument('project'));
             $activePath = $project->valetType() === 'link' ? $project->activePath() : null;
 
@@ -37,23 +39,14 @@ class ListClonesCommand extends Command
 
             if ($this->option('json')) {
                 $this->line(json_encode($entries));
-                return Command::SUCCESS;
+                return;
             }
 
             foreach ($entries as $entry) {
                 $active = $entry['active'] ? '  ✓' : '';
                 $this->line("$entry[name]  ⎇ $entry[branch]{$active}  $entry[path]");
             }
-
-            return Command::SUCCESS;
-        } catch (RuntimeException|InvalidArgumentException $e) {
-            if ($this->option('json')) {
-                $this->line(json_encode(['error' => $e->getMessage()]));
-                return Command::FAILURE;
-            }
-            $this->error($e->getMessage());
-            return Command::FAILURE;
-        }
+        });
     }
 
     private function gitBranch(string $path): string

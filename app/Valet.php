@@ -2,10 +2,57 @@
 
 namespace App;
 
+use Illuminate\Process\Pool;
+use Illuminate\Support\Facades\Process;
 use RuntimeException;
 
 class Valet
 {
+    /**
+     * Restart all running php* brew services in parallel.
+     *
+     * `valet restart` runs brew services stop/start which, once the plist is
+     * loaded, treats the service as already-running and does NOT actually
+     * kill the FPM master. Workers keep serving with stale realpath_cache
+     * (TTL 120s). `brew services restart` (user scope, no sudo) actually
+     * tears the process down and relaunches it. We restart every running
+     * php* service since projects may span multiple PHP versions.
+     *
+     * @param  ?callable(string $service, string $line): void  $onOutput  optional progress callback for streaming output
+     * @return string[]  list of services restarted (empty if none were running)
+     */
+    public static function restartPhpServices(?callable $onOutput = null): array
+    {
+        $services = self::runningPhpServices();
+
+        if ($services === []) {
+            return [];
+        }
+
+        $results = Process::concurrently(
+            function (Pool $pool) use ($services) {
+                foreach ($services as $service) {
+                    $pool->as($service)->command('brew services restart ' . escapeshellarg($service));
+                }
+            },
+            $onOutput === null ? null : function (string $type, string $output, string $key) use ($onOutput) {
+                foreach (explode("\n", rtrim($output)) as $line) {
+                    if ($line !== '') {
+                        $onOutput($key, $line);
+                    }
+                }
+            },
+        );
+
+        foreach ($results as $key => $result) {
+            if (!$result->successful()) {
+                throw new RuntimeException("$key failed: " . ($result->errorOutput() ?: $result->output()));
+            }
+        }
+
+        return $services;
+    }
+
     public static function type(string $domain): string
     {
         $sitesDir = $_SERVER['HOME'] . '/.config/valet/Sites';

@@ -3,21 +3,23 @@
 namespace App\Commands;
 
 use App\CloneCreator;
+use App\Commands\Concerns\HandlesCommandErrors;
 use App\ProjectResolver;
 use InvalidArgumentException;
 use LaravelZero\Framework\Commands\Command;
-use RuntimeException;
 
 use function Laravel\Prompts\confirm;
 
 class DeleteCloneCommand extends Command
 {
+    use HandlesCommandErrors;
+
     protected $signature   = 'cow:delete {project} {clone} {--force} {--json}';
     protected $description = 'Delete a clone';
 
     public function handle(): int
     {
-        try {
+        return $this->respond(function () {
             $project   = ProjectResolver::byName($this->argument('project'));
             $cloneName = $this->argument('clone');
 
@@ -34,7 +36,7 @@ class DeleteCloneCommand extends Command
 
             if (!$this->option('force') && !$this->option('json')) {
                 if (!confirm("Delete clone '$cloneName' at $path?", false)) {
-                    return Command::SUCCESS;
+                    return;
                 }
             } elseif (!$this->option('force') && $this->option('json')) {
                 throw new InvalidArgumentException("Pass --force to delete non-interactively");
@@ -42,20 +44,10 @@ class DeleteCloneCommand extends Command
 
             (new CloneCreator())->deleteTree($path);
 
-            if ($this->option('json')) {
-                $this->line(json_encode(['deleted' => true, 'name' => $cloneName, 'path' => $path]));
-                return Command::SUCCESS;
-            }
-
-            $this->info("✓ Deleted $path");
-            return Command::SUCCESS;
-        } catch (RuntimeException|InvalidArgumentException $e) {
-            if ($this->option('json')) {
-                $this->line(json_encode(['error' => $e->getMessage()]));
-                return Command::FAILURE;
-            }
-            $this->error($e->getMessage());
-            return Command::FAILURE;
-        }
+            $this->jsonOrInfo(
+                ['deleted' => true, 'name' => $cloneName, 'path' => $path],
+                "✓ Deleted $path",
+            );
+        });
     }
 }

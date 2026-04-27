@@ -5,27 +5,25 @@ namespace App\Commands;
 use App\CloneCreator;
 use App\CloneDir;
 use App\Config;
+use App\MenuBuilder;
 use App\Project;
+use App\SetupWizard;
 use App\Shell;
 use App\Valet;
 use Closure;
 use Illuminate\Support\Str;
 use DateTimeImmutable;
 use Exception;
-use Illuminate\Process\Pool;
-use Illuminate\Support\Facades\Process;
 use Laravel\Prompts\Concerns\Colors;
 use Laravel\Prompts\Support\Logger;
 use LaravelZero\Framework\Commands\Command;
 use RuntimeException;
 
-use function Laravel\Prompts\autocomplete;
 use function Laravel\Prompts\spin;
 use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\error;
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\search;
-use function Laravel\Prompts\select;
 use function Laravel\Prompts\task;
 use function Laravel\Prompts\text;
 
@@ -48,7 +46,7 @@ class CowCommand extends Command
 
     public function handle(): void
     {
-        $this->ensureConfigured();
+        SetupWizard::runIfNeeded();
 
         $this->project = $this->detectOrSelectProject();
 
@@ -64,96 +62,6 @@ class CowCommand extends Command
                 default                     => $this->showCloneActionMenu($choice),
             };
         } while ($choice !== self::ACTION_QUIT);
-    }
-
-    // ─── Setup ──────────────────────────────────────────────────────────────
-
-    private function ensureConfigured(): void
-    {
-        if (Config::exists()) {
-            return;
-        }
-
-        info('Welcome to cow! Let\'s set up your config.');
-
-        $clonesDir  = $this->promptForClonesDir();
-        $ideCommand = $this->promptForIde();
-        $projects   = $this->promptForInitialProjects();
-
-        Config::save([
-            'clones_dir'  => $clonesDir,
-            'ide_command' => $ideCommand,
-            'projects'    => $projects,
-        ]);
-
-        info('Config saved to ' . Config::path());
-    }
-
-    private function promptForClonesDir(): string
-    {
-        return autocomplete(
-            label: 'Where should clones be stored?',
-            options: fn(string $value) => glob(($value ?: $_SERVER['HOME'] . '/') . '*', GLOB_ONLYDIR) ?: [],
-            default: $_SERVER['HOME'] . '/Code/clones',
-            required: true,
-            validate: fn(string $value) => !is_dir(dirname($value)) ? 'Parent directory does not exist' : null,
-            hint: 'Use tab to accept, up/down to cycle.',
-        );
-    }
-
-    private function promptForIde(): string
-    {
-        return select(
-            label: 'Which IDE do you use?',
-            options: ['phpstorm' => 'PhpStorm', 'code' => 'VS Code', 'cursor' => 'Cursor'],
-        );
-    }
-
-    private function promptForInitialProjects(): array
-    {
-        $projects = [];
-
-        do {
-            $projects[] = $this->promptForProject();
-        } while (confirm('Add another project?', false));
-
-        return $projects;
-    }
-
-    private function promptForProject(): array
-    {
-        $name   = text(label: 'Project name', placeholder: 'My Project', required: true);
-        $path   = $this->promptForProjectPath();
-        $domain = $this->resolveDomain($path);
-
-        return compact('name', 'path', 'domain');
-    }
-
-    private function promptForProjectPath(): string
-    {
-        return autocomplete(
-            label: 'Absolute path to source repo',
-            options: fn(string $value) => glob(($value ?: $_SERVER['HOME'] . '/') . '*', GLOB_ONLYDIR) ?: [],
-            default: $_SERVER['HOME'] . '/',
-            required: true,
-            validate: fn(string $value) => is_dir($value) ? null : 'Directory does not exist',
-            hint: 'Use tab to accept, up/down to cycle.',
-        );
-    }
-
-    private function resolveDomain(string $path): string
-    {
-        $detected = Valet::domainForPath($path);
-
-        if ($detected !== null) {
-            info("Detected valet domain: $detected");
-            return $detected;
-        }
-
-        return text(
-            label: 'Valet domain (without .test)',
-            placeholder: 'myproject',
-        );
     }
 
     // ─── Project Selection ──────────────────────────────────────────────────
@@ -189,7 +97,7 @@ class CowCommand extends Command
 
     private function addProject(): Project
     {
-        $data = $this->promptForProject();
+        $data = SetupWizard::promptForProject();
 
         $config               = Config::load();
         $config['projects'][] = $data;
@@ -204,55 +112,21 @@ class CowCommand extends Command
 
     private function showMainMenu(): string
     {
-        [$options, $meta] = $this->buildMainMenu();
+        $activePath = $this->project->valetType() === 'link' ? $this->project->activePath() : null;
+
+        [$options, $meta] = (new MenuBuilder())->buildMain($this->project, $activePath, self::TARGET_MAIN, [
+            self::ACTION_NEW_CLONE        => '+ New clone',
+            self::ACTION_NEW_CLONE_PR     => '+ New clone from PR',
+            self::ACTION_NEW_CLONE_BRANCH => '+ New clone from branch',
+            self::ACTION_CHANGE_PROJECT   => '⇄ Change project',
+            self::ACTION_QUIT             => '✕ Quit',
+        ]);
 
         return $this->askMenu(
             label: $this->project->name(),
             options: $options,
             info: fn(?string $value) => $meta[$value] ?? '',
         );
-    }
-
-    private function buildMainMenu(): array
-    {
-        $project    = $this->project;
-        $activePath = $project->valetType() === 'link' ? $project->activePath() : null;
-
-        $options = [];
-        $meta    = [];
-
-        foreach ($this->menuEntries($project, $activePath) as [$name, $branch, $active]) {
-            $label          = $active ? $this->green($name . '  ✓') : $name;
-            $options[$name] = $label;
-            $meta[$name]    = '⎇ ' . $branch;
-        }
-
-        $options[self::ACTION_NEW_CLONE]        = '+ New clone';
-        $options[self::ACTION_NEW_CLONE_PR]     = '+ New clone from PR';
-        $options[self::ACTION_NEW_CLONE_BRANCH] = '+ New clone from branch';
-        $options[self::ACTION_CHANGE_PROJECT]   = '⇄ Change project';
-        $options[self::ACTION_QUIT]             = '✕ Quit';
-
-        return [$options, $meta];
-    }
-
-    private function menuEntries(Project $project, ?string $activePath): array
-    {
-        $entries = [[
-            self::TARGET_MAIN,
-            $this->gitBranch($project->path()),
-            $this->isActive($project->path(), $activePath),
-        ]];
-
-        foreach ($project->clones() as $clone) {
-            $entries[] = [
-                $clone->name(),
-                $clone->branch(),
-                $this->isActive($clone->path(), $activePath),
-            ];
-        }
-
-        return $entries;
     }
 
     // ─── Clone Action Menu ──────────────────────────────────────────────────
@@ -272,7 +146,7 @@ class CowCommand extends Command
 
         $action = $this->askMenu(
             label: $name,
-            options: $this->buildCloneActions($name, $project->valetType()),
+            options: (new MenuBuilder())->buildCloneActions($name, $project->valetType(), self::TARGET_MAIN),
             info: fn(?string $_) => $info,
         );
 
@@ -291,25 +165,6 @@ class CowCommand extends Command
         }
 
         return $this->findClone($this->project->clones(), $name)?->path();
-    }
-
-    private function buildCloneActions(string $name, string $valetType): array
-    {
-        $options = [];
-
-        if ($valetType !== 'proxy') {
-            $options['activate'] = $valetType === 'link' ? 'Activate (relink valet)' : 'Activate (link valet)';
-        }
-
-        $options['ide'] = 'Open in IDE';
-
-        if ($name !== self::TARGET_MAIN) {
-            $options['delete'] = 'Delete';
-        }
-
-        $options['back'] = '←  Back';
-
-        return $options;
     }
 
     // ─── Clone Actions ──────────────────────────────────────────────────────
@@ -338,23 +193,7 @@ class CowCommand extends Command
                     $this->timed($logger, 'Restarted ' . implode(', ', $services), function () use ($logger, $services) {
                         $logger->subLabel('brew services restart ' . implode(' ', $services) . ' (parallel)');
 
-                        $results = Process::concurrently(function (Pool $pool) use ($services) {
-                            foreach ($services as $service) {
-                                $pool->as($service)->command('brew services restart ' . escapeshellarg($service));
-                            }
-                        }, function (string $type, string $output, string $key) use ($logger) {
-                            foreach (explode("\n", rtrim($output)) as $line) {
-                                if ($line !== '') {
-                                    $logger->line("[$key] $line");
-                                }
-                            }
-                        });
-
-                        foreach ($results as $key => $result) {
-                            if (!$result->successful()) {
-                                throw new RuntimeException("$key failed: " . ($result->errorOutput() ?: $result->output()));
-                            }
-                        }
+                        Valet::restartPhpServices(fn(string $key, string $line) => $logger->line("[$key] $line"));
                     });
                 }
 
@@ -512,40 +351,34 @@ class CowCommand extends Command
 
     private function createClone(string $branch, string $cloneName): void
     {
-        $source = $this->project->path();
-        $dest   = $this->project->clonesDir() . '/' . $cloneName;
+        $creator = new CloneCreator();
+        $source  = $this->project->path();
 
-        if (!$this->prepareDestination($dest, $cloneName)) {
+        try {
+            $dest = $creator->prepareDestination($this->project, $cloneName);
+        } catch (RuntimeException $e) {
+            error($e->getMessage());
             return;
         }
 
-        $installDeps = file_exists("$source/composer.json");
-
         task(
             label: "Creating clone $cloneName",
-            callback: function (Logger $logger) use ($source, $dest, $branch, $installDeps) {
-                $this->timed($logger, 'Copied source', function () use ($logger, $source, $dest) {
+            callback: function (Logger $logger) use ($creator, $source, $dest, $branch) {
+                $this->timed($logger, 'Copied source', function () use ($logger, $creator, $source, $dest) {
                     $logger->subLabel("clonefile($source, $dest)");
-                    (new CloneCreator())->cloneTree($source, $dest);
+                    $creator->cloneTree($source, $dest);
                 });
 
-                $escapedDest   = escapeshellarg($dest);
-                $escapedBranch = escapeshellarg($branch);
-
-                $this->timed($logger, "Checked out $branch", function () use ($logger, $escapedDest, $escapedBranch) {
-                    if (Shell::quietly("git -C $escapedDest fetch origin $escapedBranch")) {
-                        Shell::stream($logger, "git -C $escapedDest checkout $escapedBranch");
-                    } else {
-                        Shell::stream($logger, "git -C $escapedDest checkout -b $escapedBranch");
-                    }
-                    Shell::quietly("git -C $escapedDest restore .");
+                $this->timed($logger, "Checked out $branch", function () use ($logger, $creator, $dest, $branch) {
+                    $logger->subLabel("git checkout $branch");
+                    $creator->checkoutBranch($dest, $branch, fn(string $line) => $logger->line($line));
                 });
 
-                if ($installDeps && CloneCreator::composerLockDiffers($source, $dest)) {
-                    $this->timed($logger, 'Installed composer dependencies', fn() => Shell::stream(
-                        $logger,
-                        'composer -d ' . escapeshellarg($dest) . ' install --no-interaction',
-                    ));
+                if (CloneCreator::composerLockDiffers($source, $dest)) {
+                    $this->timed($logger, 'Installed composer dependencies', function () use ($logger, $creator, $source, $dest) {
+                        $logger->subLabel('composer install');
+                        $creator->composerInstallIfNeeded($source, $dest, fn(string $line) => $logger->line($line));
+                    });
                 }
 
                 return true;
@@ -554,23 +387,6 @@ class CowCommand extends Command
         );
 
         info("✓ Done: $dest [$branch]");
-    }
-
-
-    private function prepareDestination(string $dest, string $cloneName): bool
-    {
-        if (is_dir($dest)) {
-            error("Clone '$cloneName' already exists at $dest");
-            return false;
-        }
-
-        $parent = dirname($dest);
-
-        if (!is_dir($parent)) {
-            mkdir($parent, 0755, true);
-        }
-
-        return true;
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────────

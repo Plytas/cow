@@ -2,20 +2,21 @@
 
 namespace App\Commands;
 
+use App\Commands\Concerns\HandlesCommandErrors;
 use App\Config;
 use App\Project;
-use InvalidArgumentException;
 use LaravelZero\Framework\Commands\Command;
-use RuntimeException;
 
 class ProjectsCommand extends Command
 {
+    use HandlesCommandErrors;
+
     protected $signature   = 'cow:projects {--json}';
     protected $description = 'List configured projects';
 
     public function handle(): int
     {
-        try {
+        return $this->respond(function () {
             $projects = array_map(
                 fn(array $data) => [
                     'name'   => $data['name'],
@@ -28,21 +29,12 @@ class ProjectsCommand extends Command
 
             if ($this->option('json')) {
                 $this->line(json_encode($projects));
-                return Command::SUCCESS;
+                return;
             }
 
             foreach ($projects as $project) {
                 $this->line("{$project['name']}  {$project['domain']}  {$project['path']}");
             }
-
-            return Command::SUCCESS;
-        } catch (RuntimeException|InvalidArgumentException $e) {
-            if ($this->option('json')) {
-                $this->line(json_encode(['error' => $e->getMessage()]));
-                return Command::FAILURE;
-            }
-            $this->error($e->getMessage());
-            return Command::FAILURE;
-        }
+        });
     }
 }
