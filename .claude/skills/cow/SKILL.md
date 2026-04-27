@@ -96,17 +96,6 @@ Downloads and replaces the binary with the latest release from GitHub.
 
 ---
 
-## Releasing a new version
-
-Push a version tag — GitHub Actions builds the PHAR and publishes the release automatically:
-
-```bash
-git tag v1.2.3
-git push origin v1.2.3
-```
-
----
-
 ## Error handling
 
 All commands return `{"error":"..."}` with exit code 1 on failure:
