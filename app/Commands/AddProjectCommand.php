@@ -2,21 +2,23 @@
 
 namespace App\Commands;
 
+use App\Commands\Concerns\HandlesCommandErrors;
 use App\Config;
 use App\Project;
 use App\Valet;
 use InvalidArgumentException;
 use LaravelZero\Framework\Commands\Command;
-use RuntimeException;
 
 class AddProjectCommand extends Command
 {
+    use HandlesCommandErrors;
+
     protected $signature   = 'cow:project-add {name} {path} {--domain=} {--json}';
     protected $description = 'Add a new project to the config';
 
     public function handle(): int
     {
-        try {
+        return $this->respond(function () {
             $name   = $this->argument('name');
             $path   = rtrim($this->argument('path'), '/');
             $domain = $this->option('domain');
@@ -40,25 +42,15 @@ class AddProjectCommand extends Command
 
             $project = new Project($data);
 
-            if ($this->option('json')) {
-                $this->line(json_encode([
+            $this->jsonOrInfo(
+                [
                     'name'   => $project->name(),
                     'path'   => $project->path(),
                     'domain' => $project->domain(),
                     'slug'   => $project->slug(),
-                ]));
-                return Command::SUCCESS;
-            }
-
-            $this->info("✓ Added project \"{$project->name()}\"");
-            return Command::SUCCESS;
-        } catch (RuntimeException|InvalidArgumentException $e) {
-            if ($this->option('json')) {
-                $this->line(json_encode(['error' => $e->getMessage()]));
-                return Command::FAILURE;
-            }
-            $this->error($e->getMessage());
-            return Command::FAILURE;
-        }
+                ],
+                "✓ Added project \"{$project->name()}\"",
+            );
+        });
     }
 }
